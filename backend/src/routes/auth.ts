@@ -1,4 +1,4 @@
-import { randomBytes } from 'node:crypto';
+import { randomBytes, createHmac } from 'node:crypto';
 import { Router } from 'express';
 import { config, googleRedirectUri, isProd } from '../config';
 import { query } from '../db/pool';
@@ -7,8 +7,34 @@ import { requireAuth, SESSION_COOKIE, setSessionCookie } from '../middleware/aut
 import { UserRow } from '../types';
 
 export const authRouter = Router();
-const STATE_COOKIE = 'google_oauth_state';
-const RETURN_TO_COOKIE = 'auth_return_to';
+
+/**
+ * Sign a state string with HMAC so we can verify it on callback
+ * without needing cookies (which Chrome's "Dangerous site" warning blocks).
+ */
+function signState(nonce: string, returnTo: string): string {
+  const payload = `${nonce}|${returnTo}`;
+  const sig = createHmac('sha256', config.JWT_SECRET).update(payload).digest('hex').slice(0, 16);
+  return `${sig}.${Buffer.from(payload).toString('base64url')}`;
+}
+
+function verifyState(state: string): { nonce: string; returnTo: string } | null {
+  const dot = state.indexOf('.');
+  if (dot < 0) return null;
+  const sig = state.slice(0, dot);
+  const payloadB64 = state.slice(dot + 1);
+  let payload: string;
+  try {
+    payload = Buffer.from(payloadB64, 'base64url').toString();
+  } catch {
+    return null;
+  }
+  const expected = createHmac('sha256', config.JWT_SECRET).update(payload).digest('hex').slice(0, 16);
+  if (sig !== expected) return null;
+  const pipe = payload.indexOf('|');
+  if (pipe < 0) return null;
+  return { nonce: payload.slice(0, pipe), returnTo: payload.slice(pipe + 1) };
+}
 
 /** Step 1: send the browser to Google's consent screen. */
 authRouter.get('/google', (req, res) => {
@@ -29,15 +55,9 @@ authRouter.get('/google', (req, res) => {
     return;
   }
 
-  res.cookie(RETURN_TO_COOKIE, clientOrigin, {
-    httpOnly: true,
-    sameSite: isProd ? 'none' : 'lax',
-    secure: isProd,
-    maxAge: 10 * 60 * 1000,
-  });
+  const nonce = randomBytes(24).toString('hex');
+  const state = signState(nonce, clientOrigin);
 
-  const state = randomBytes(24).toString('hex');
-  res.cookie(STATE_COOKIE, state, { httpOnly: true, sameSite: isProd ? 'none' : 'lax', secure: isProd, maxAge: 10 * 60 * 1000 });
   const params = new URLSearchParams({
     client_id: config.GOOGLE_CLIENT_ID,
     redirect_uri: googleRedirectUri,
@@ -51,15 +71,17 @@ authRouter.get('/google', (req, res) => {
 
 /** Step 2: Google redirects back with a code; exchange it, upsert the user, start a session. */
 authRouter.get('/google/callback', async (req, res, next) => {
-  const clientOrigin = req.cookies?.[RETURN_TO_COOKIE] || config.APP_URL;
   try {
-    const { code, state, error } = req.query as Record<string, string | undefined>;
+    const { code, state: rawState, error } = req.query as Record<string, string | undefined>;
+
+    // Verify the signed state (no cookies needed)
+    const verified = rawState ? verifyState(rawState) : null;
+    const clientOrigin = verified?.returnTo || config.APP_URL;
+
     if (error) return res.redirect(`${clientOrigin}/?error=google_denied`);
-    if (!code || !state || state !== req.cookies?.[STATE_COOKIE]) {
+    if (!code || !verified) {
       throw new HttpError(400, 'Login could not be verified. Please try signing in again.');
     }
-    res.clearCookie(STATE_COOKIE);
-    res.clearCookie(RETURN_TO_COOKIE);
 
     const tokenRes = await fetch('https://oauth2.googleapis.com/token', {
       method: 'POST',
