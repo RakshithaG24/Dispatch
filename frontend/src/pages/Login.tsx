@@ -40,7 +40,7 @@ export default function Login() {
           </p>
           <div className="mt-8">
             <a
-              href={apiUrl("/api/auth/google")}
+              href={`${apiUrl("/api/auth/google")}?returnTo=${encodeURIComponent(typeof window !== "undefined" ? window.location.origin : "")}`}
               className="inline-flex items-center rounded bg-accent px-5 py-2.5 text-sm font-medium text-white transition-colors hover:bg-accent-dark"
             >
               Continue with Google
