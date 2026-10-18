@@ -19,7 +19,7 @@ export function setSessionCookie(res: Response, userId: string): void {
   const token = jwt.sign({ sub: userId }, config.JWT_SECRET, { expiresIn: `${SESSION_DAYS}d` });
   res.cookie(SESSION_COOKIE, token, {
     httpOnly: true,
-    sameSite: isProd ? 'none' : 'lax',
+    sameSite: 'lax',
     secure: isProd,
     maxAge: SESSION_DAYS * 24 * 3600 * 1000,
   });

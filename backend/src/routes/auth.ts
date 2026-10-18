@@ -1,5 +1,6 @@
 import { randomBytes, createHmac } from 'node:crypto';
 import { Router } from 'express';
+import jwt from 'jsonwebtoken';
 import { config, googleRedirectUri, isProd } from '../config';
 import { query } from '../db/pool';
 import { HttpError } from '../middleware/errors';
@@ -74,7 +75,6 @@ authRouter.get('/google/callback', async (req, res, next) => {
   try {
     const { code, state: rawState, error } = req.query as Record<string, string | undefined>;
 
-    // Verify the signed state (no cookies needed)
     const verified = rawState ? verifyState(rawState) : null;
     const clientOrigin = verified?.returnTo || config.APP_URL;
 
@@ -109,10 +109,39 @@ authRouter.get('/google/callback', async (req, res, next) => {
        RETURNING id, google_id, email, name, avatar_url`,
       [profile.sub, profile.email, profile.name ?? profile.email, profile.picture ?? null],
     );
-    setSessionCookie(res, rows[0].id);
-    res.redirect(`${clientOrigin}/dashboard`);
+
+    // Create a short-lived login token (30 seconds) to set the session cookie
+    // through the Vercel proxy so the cookie lands on the frontend domain.
+    const loginToken = jwt.sign(
+      { sub: rows[0].id, purpose: 'login' },
+      config.JWT_SECRET,
+      { expiresIn: '30s' },
+    );
+
+    // Redirect through the frontend's /api proxy so the cookie is set on the frontend domain
+    res.redirect(`${clientOrigin}/api/auth/complete-login?token=${loginToken}`);
   } catch (err) {
     next(err);
+  }
+});
+
+/**
+ * Step 3: Called through the Vercel proxy so the session cookie is set on the
+ * frontend domain. The short-lived login token proves the user just authenticated.
+ */
+authRouter.get('/complete-login', (req, res) => {
+  const { token } = req.query as { token?: string };
+  if (!token) {
+    res.status(400).json({ error: 'Missing token' });
+    return;
+  }
+  try {
+    const payload = jwt.verify(token, config.JWT_SECRET) as { sub: string; purpose?: string };
+    if (payload.purpose !== 'login') throw new Error('invalid token purpose');
+    setSessionCookie(res, payload.sub);
+    res.redirect('/dashboard');
+  } catch {
+    res.status(400).json({ error: 'Invalid or expired login token. Please sign in again.' });
   }
 });
 
