@@ -16,7 +16,7 @@ authRouter.get('/google', (_req, res) => {
     return;
   }
   const state = randomBytes(24).toString('hex');
-  res.cookie(STATE_COOKIE, state, { httpOnly: true, sameSite: 'lax', secure: isProd, maxAge: 10 * 60 * 1000 });
+  res.cookie(STATE_COOKIE, state, { httpOnly: true, sameSite: isProd ? 'none' : 'lax', secure: isProd, maxAge: 10 * 60 * 1000 });
   const params = new URLSearchParams({
     client_id: config.GOOGLE_CLIENT_ID,
     redirect_uri: googleRedirectUri,

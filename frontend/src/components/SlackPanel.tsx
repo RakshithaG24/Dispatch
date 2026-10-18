@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { api, errorText } from "../api/client";
+import { api, apiUrl, errorText } from "../api/client";
 import type { SlackStatus } from "../api/types";
 import { useToast } from "../hooks/useToast";
 import { Button } from "./ui/Button";
@@ -64,7 +64,7 @@ export function SlackPanel() {
             </Button>
           </>
         ) : (
-          <Button disabled={!status.configured} onClick={() => window.location.assign("/api/slack/connect")}>
+          <Button disabled={!status.configured} onClick={() => window.location.assign(apiUrl("/api/slack/connect"))}>
             Connect Slack
           </Button>
         )}

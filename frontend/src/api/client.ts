@@ -6,9 +6,16 @@ export class ApiError extends Error {
   }
 }
 
+export const API_BASE = (import.meta.env.VITE_API_URL ?? "").replace(/\/$/, "");
+
+export function apiUrl(path: string): string {
+  return path.startsWith("http") ? path : `${API_BASE}${path}`;
+}
+
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
-  const res = await fetch(path, {
-    credentials: "same-origin",
+  const url = apiUrl(path);
+  const res = await fetch(url, {
+    credentials: "include",
     ...init,
     headers: { "Content-Type": "application/json", ...init.headers },
   });

@@ -7,9 +7,11 @@ import { UserRow } from '../types';
 export const SESSION_COOKIE = 'session';
 const SESSION_DAYS = 7;
 
-declare module 'express-serve-static-core' {
-  interface Request {
-    user?: UserRow;
+declare global {
+  namespace Express {
+    interface Request {
+      user?: UserRow;
+    }
   }
 }
 
@@ -17,7 +19,7 @@ export function setSessionCookie(res: Response, userId: string): void {
   const token = jwt.sign({ sub: userId }, config.JWT_SECRET, { expiresIn: `${SESSION_DAYS}d` });
   res.cookie(SESSION_COOKIE, token, {
     httpOnly: true,
-    sameSite: 'lax',
+    sameSite: isProd ? 'none' : 'lax',
     secure: isProd,
     maxAge: SESSION_DAYS * 24 * 3600 * 1000,
   });

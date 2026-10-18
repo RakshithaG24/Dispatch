@@ -6,7 +6,11 @@ import { config } from './config';
  * workers, otherwise blocking commands throw after a few retries.
  */
 export function createRedis(): IORedis {
-  return new IORedis(config.REDIS_URL, { maxRetriesPerRequest: null });
+  const isTls = config.REDIS_URL.startsWith('rediss://');
+  return new IORedis(config.REDIS_URL, {
+    maxRetriesPerRequest: null,
+    ...(isTls ? { tls: { rejectUnauthorized: false } } : {}),
+  });
 }
 
 /** Shared connection for the queue, rate limiter and Slack notification dedupe. */

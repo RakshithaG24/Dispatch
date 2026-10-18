@@ -4,8 +4,10 @@ import { createBullBoard } from '@bull-board/api';
 import { BullMQAdapter } from '@bull-board/api/bullMQAdapter';
 import { ExpressAdapter } from '@bull-board/express';
 import cookieParser from 'cookie-parser';
+import cors from 'cors';
 import express from 'express';
 import helmet from 'helmet';
+import { config } from './config';
 import { requireAuth } from './middleware/auth';
 import { errorHandler } from './middleware/errors';
 import { emailQueue } from './queue/queue';
@@ -19,8 +21,30 @@ import { elasticsearchHealthy } from './services/search';
 export function createApp() {
   const app = express();
   app.set('trust proxy', 1);
+
+  const allowedOrigins = [
+    config.APP_URL,
+    config.APP_URL.replace(/\/$/, ''),
+    'http://localhost:5173',
+    'http://localhost:3000',
+  ];
+
+  app.use(
+    cors({
+      origin: (origin, callback) => {
+        if (!origin) return callback(null, true);
+        const clean = origin.replace(/\/$/, '');
+        if (allowedOrigins.includes(clean) || clean.endsWith('.vercel.app')) {
+          return callback(null, true);
+        }
+        return callback(null, true);
+      },
+      credentials: true,
+    })
+  );
+
   // CSP is relaxed only because the Bull Board UI ships inline scripts; the API returns JSON.
-  app.use(helmet({ contentSecurityPolicy: false }));
+  app.use(helmet({ contentSecurityPolicy: false, crossOriginResourcePolicy: false }));
   app.use(express.json({ limit: '2mb' }));
   app.use(cookieParser());
 

@@ -3,6 +3,7 @@ import { Layout } from "../components/Layout";
 import { Spinner } from "../components/ui/Spinner";
 import { useAuth } from "../hooks/useAuth";
 import { site } from "../config/site";
+import { apiUrl } from "../api/client";
 
 const LOGIN_ERRORS: Record<string, string> = {
   google_denied: "Google sign-in was cancelled. You can try again when you are ready.",
@@ -39,7 +40,7 @@ export default function Login() {
           </p>
           <div className="mt-8">
             <a
-              href="/api/auth/google"
+              href={apiUrl("/api/auth/google")}
               className="inline-flex items-center rounded bg-accent px-5 py-2.5 text-sm font-medium text-white transition-colors hover:bg-accent-dark"
             >
               Continue with Google
